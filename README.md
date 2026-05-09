@@ -37,6 +37,8 @@ adb install -r app/build/outputs/apk/debug/app-debug.apk
 
 If you only need to sideload, grab the latest `app-debug.apk` from the Releases page.
 
+For non-technical users: see [INSTALL.md](INSTALL.md) for a step-by-step phone install guide in English and Nederlands.
+
 ## Tag formats currently supported
 
 Real-world layouts observed in production:
