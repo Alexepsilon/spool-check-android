@@ -1,0 +1,38 @@
+# Gradle
+.gradle/
+build/
+out/
+
+# Android Studio / IntelliJ
+.idea/
+*.iml
+captures/
+local.properties
+
+# Build outputs
+*.apk
+*.aab
+*.ap_
+*.dex
+*.class
+
+# Logs / temp files
+*.log
+build_log.txt
+
+# Keystore (never commit signing keys)
+*.jks
+*.keystore
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Lint
+lint/intermediates/
+lint/generated/
+lint/outputs/
+lint/tmp/
+
+# Native (NDK)
+.cxx/

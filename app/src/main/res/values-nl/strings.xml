@@ -1,0 +1,132 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Spool Check</string>
+
+    <!-- Common -->
+    <string name="cancel">Annuleer</string>
+    <string name="back">Terug</string>
+    <string name="ok">OK</string>
+    <string name="delete">Verwijder</string>
+    <string name="confirm">Bevestig</string>
+    <string name="yes">Ja</string>
+    <string name="no">Nee</string>
+    <string name="settings">Instellingen</string>
+    <string name="more">Meer</string>
+    <string name="close">Sluiten</string>
+
+    <!-- Home -->
+    <string name="home_empty_title">Nog geen leveringen</string>
+    <string name="home_empty_subtitle">Importeer een transportlijst (Excel) om te beginnen met scannen.</string>
+    <string name="home_new">Nieuwe levering</string>
+    <string name="home_long_press_hint">Houd een levering ingedrukt om te verwijderen.</string>
+    <string name="home_scanned_fmt">%1$d / %2$d gescand · %3$s</string>
+    <string name="home_delete_title">Levering verwijderen?</string>
+    <string name="home_delete_body_fmt">Definitief \"%1$s\" en alle scans, items en onbekende invoeren verwijderen? Dit kan niet ongedaan gemaakt worden.</string>
+
+    <!-- Import -->
+    <string name="import_title">Lijst importeren</string>
+    <string name="import_pick_xlsx">📊  Kies .xlsx bestand</string>
+    <string name="import_pick_photos">📷  Foto(\'s) van een papieren lijst</string>
+    <string name="import_xlsx_hint">Kies de .xlsx transportlijst. Tekening, Spool en andere kolommen worden automatisch herkend uit de kopregel.</string>
+    <string name="import_photos_hint">Tik om één of meer pagina\'s te kiezen — houd ingedrukt in de kiezer voor meerdere selectie.</string>
+    <string name="import_no_codes">Geen codes herkend.</string>
+    <string name="import_failed_fmt">Importeren mislukt: %1$s</string>
+    <string name="import_pages_failed_fmt">Sommige pagina\'s mislukt: %1$s</string>
+    <string name="import_photo_failed_fmt">Foto-OCR mislukt: %1$s</string>
+    <string name="import_transport_prefix">Transport — %1$s</string>
+    <string name="import_default_name">Geïmporteerd</string>
+
+    <!-- Status board -->
+    <string name="board_remaining_fmt">%1$d resterend</string>
+    <string name="board_missing_fmt">%1$d mist</string>
+    <string name="board_search">Zoek op tekening of spool…</string>
+    <string name="board_filter_all">Alle</string>
+    <string name="board_filter_verified">Geverifieerd</string>
+    <string name="board_filter_missing">Mist</string>
+    <string name="board_filter_with_count_fmt">%1$s (%2$d)</string>
+    <string name="board_open_scanner">📷  Scannen</string>
+    <string name="board_uncharted">⚠ Onbekend</string>
+    <string name="board_uncharted_fmt">⚠ Onbekend (%1$d)</string>
+    <string name="board_export">Exporteer naar Excel</string>
+    <string name="board_export_failed_fmt">Export mislukt: %1$s</string>
+    <string name="board_send_report">Rapport versturen</string>
+    <string name="board_no_matches">Geen resultaten</string>
+    <string name="board_mark_verified">Geverifieerd</string>
+    <string name="board_mark_missing">Mist</string>
+    <string name="board_mark_damaged">Beschadigd</string>
+    <string name="board_mark_reset">Terugzetten</string>
+    <string name="board_delete_label">Verwijder dit label</string>
+
+    <!-- Status board column headers -->
+    <string name="col_drawing">Tekening nr.</string>
+    <string name="col_spool">Spool</string>
+    <string name="col_diameter">Ø</string>
+    <string name="col_paint">Verf</string>
+    <string name="col_ral">RAL</string>
+    <string name="col_chclean">Ch.clean.</string>
+    <string name="col_project">Project</string>
+    <string name="col_iso">Iso nr.</string>
+    <string name="col_remark">Opmerking</string>
+    <string name="col_verified_at">Geverifieerd op</string>
+
+    <!-- Scanner -->
+    <string name="scan_aim">Houd Tek nr én Spool binnen het vak</string>
+    <string name="scan_auto_ticks">Automatisch goedgekeurd na 2 stabiele lezingen.</string>
+    <string name="scan_reading">LEZEN</string>
+    <string name="scan_aiming">richten…</string>
+    <string name="scan_on_list">op lijst ✓</string>
+    <string name="scan_drawing_only">tekening op lijst, bevestig spool</string>
+    <string name="scan_off_list">niet op lijst</string>
+    <string name="scan_sheet_fmt">Sheet: %1$s</string>
+    <string name="scan_tag">Tag</string>
+    <string name="scan_sheet">Sheet</string>
+    <string name="scan_scope">Scope</string>
+    <string name="scan_code">Code</string>
+    <string name="scan_spool_label">Spool</string>
+    <string name="scan_tap_to_change">Tik om te wijzigen</string>
+    <string name="scan_custom_spool">Of typ eigen spool</string>
+    <string name="scan_match_found">Match gevonden</string>
+    <string name="scan_wrong_match">Foutieve match</string>
+    <string name="scan_confirm_scan">Scan bevestigen</string>
+    <string name="scan_ocr_uncertain">OCR was onzeker. Bedoelde je:</string>
+    <string name="scan_read_as_fmt">Gelezen als: %1$s</string>
+    <string name="scan_which_spool">Welke spool?</string>
+    <string name="scan_cant_read_spool">OCR kon de spool-letter niet duidelijk lezen.</string>
+    <string name="scan_not_on_list">Niet op de lijst</string>
+    <string name="scan_edit_then_add">Pas aan als OCR fout las en voeg toe aan Onbekend.</string>
+    <string name="scan_field_drawing">Tekening</string>
+    <string name="scan_field_spool">Spool</string>
+    <string name="scan_add_uncharted">Voeg toe aan Onbekend</string>
+    <string name="scan_try_again">Opnieuw</string>
+    <string name="scan_add_uncharted_failed_fmt">Toevoegen aan Onbekend mislukt: %1$s</string>
+    <string name="scan_diameter_fmt">Ø: %1$s</string>
+    <string name="scan_chclean_fmt">Ch.clean / Scope: %1$s</string>
+
+    <!-- Settings -->
+    <string name="settings_title">Instellingen</string>
+    <string name="settings_language">Taal</string>
+    <string name="settings_about">Over</string>
+    <string name="settings_about_version">Spool Check Android · v0.1</string>
+    <string name="settings_about_blurb">Native build met ML Kit tekstherkenning. Alle data blijft lokaal op dit apparaat.</string>
+    <string name="settings_lang_english">English</string>
+    <string name="settings_lang_dutch">Nederlands</string>
+    <string name="settings_haptic_title">Trillen bij match</string>
+    <string name="settings_haptic_subtitle">Korte buzz wanneer een tag is geverifieerd of toegevoegd aan Onbekend.</string>
+    <string name="settings_scanner">Scanner</string>
+
+    <!-- Uncharted -->
+    <string name="uncharted_title">Onbekende items</string>
+    <string name="uncharted_hint">Scans die niet bij de masterlijst van deze levering passen. Tik om een actie te kiezen.</string>
+    <string name="uncharted_empty">Nog geen onbekende scans.</string>
+    <string name="uncharted_set_disposition">Kies actie:</string>
+    <string name="uncharted_wrong_project">Verkeerd project</string>
+    <string name="uncharted_other_system">Ander systeem</string>
+    <string name="uncharted_investigate">Onderzoek</string>
+    <string name="uncharted_advance">Vooraf geleverd</string>
+    <string name="uncharted_resolved">Opgelost</string>
+    <string name="uncharted_delete">Verwijder</string>
+    <string name="uncharted_spool_fmt">spool %1$s</string>
+    <string name="uncharted_sheet_fmt">sheet %1$s</string>
+    <string name="uncharted_sheet_label">Sheet</string>
+    <string name="uncharted_no_sheet">geen sheet</string>
+</resources>

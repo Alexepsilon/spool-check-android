@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- AppCompat-based base theme that hosts the Compose surface.
+         AppCompat parent is required so AppCompatDelegate.setApplicationLocales()
+         (used by the Settings language toggle) actually persists and applies. -->
+    <style name="Theme.SpoolCheck" parent="Theme.AppCompat.Light.NoActionBar">
+        <item name="android:statusBarColor">@color/primary</item>
+        <item name="android:windowBackground">@color/background</item>
+        <item name="android:colorPrimary">@color/primary</item>
+        <item name="android:colorAccent">@color/accent</item>
+    </style>
+</resources>

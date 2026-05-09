@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="primary">#1E5F8E</color>
+    <color name="accent">#26A65B</color>
+    <color name="background">#F5F7FA</color>
+
+    <color name="status_verified">#16A34A</color>
+    <color name="status_expected">#9CA3AF</color>
+    <color name="status_missing">#DC2626</color>
+    <color name="status_damaged">#EA580C</color>
+    <color name="status_pending">#F59E0B</color>
+</resources>
