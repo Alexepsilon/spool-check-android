@@ -10,13 +10,13 @@ Two languages below — pick yours.
 
 Tap this link on your Android phone:
 
-https://github.com/Alexepsilon/spool-check-android/releases/latest/download/spool-check-v0.1.0-debug.apk
+https://github.com/Alexepsilon/spool-check-android/releases/latest/download/spool-check-v1.0-debug.apk
 
 Chrome may warn that "this type of file can harm your device" — that's a generic warning shown for every APK download. Tap **Download anyway**.
 
 **2. Open the file**
 
-When the download finishes, tap the notification, or open Files → Downloads → tap **spool-check-v0.1.0-debug.apk**.
+When the download finishes, tap the notification, or open Files → Downloads → tap **spool-check-v1.0-debug.apk**.
 
 **3. Allow install from this source (first time only)**
 
@@ -40,13 +40,13 @@ Tap **Open**, or find **Spool Check** in your app drawer.
 
 Tik op deze link op je Android-telefoon:
 
-https://github.com/Alexepsilon/spool-check-android/releases/latest/download/spool-check-v0.1.0-debug.apk
+https://github.com/Alexepsilon/spool-check-android/releases/latest/download/spool-check-v1.0-debug.apk
 
 Chrome geeft mogelijk een waarschuwing dat "dit type bestand schadelijk kan zijn" — dat is een standaard melding bij elk APK-bestand. Tik op **Toch downloaden**.
 
 **2. Open het bestand**
 
-Als de download klaar is, tik op de melding, of open Bestanden → Downloads → tik op **spool-check-v0.1.0-debug.apk**.
+Als de download klaar is, tik op de melding, of open Bestanden → Downloads → tik op **spool-check-v1.0-debug.apk**.
 
 **3. Sta installatie toe (alleen de eerste keer)**
 
