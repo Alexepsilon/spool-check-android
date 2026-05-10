@@ -182,7 +182,9 @@ object PhotoListImporter {
         for ((rawIdx, rawLine) in lines.withIndex()) {
             val line = rawLine.uppercase()
             for (match in pattern.findAll(line)) {
-                val drawing = match.value
+                // Repair OCR-confused chars per position (digits in
+                // letter slots, letters in digit slots) before deduping.
+                val drawing = normalizeDrawing(match.value)
                 // Look for a lone uppercase letter ELSEWHERE in the line
                 // (excluding the drawing's own characters), since drawings
                 // ending in "-T" would otherwise self-match.

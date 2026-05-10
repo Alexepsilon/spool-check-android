@@ -87,3 +87,52 @@ fun deriveDiameter(drawing: String): String? {
  */
 fun effectiveDiameter(stored: String?, drawing: String): String? =
     stored?.takeIf { it.isNotEmpty() } ?: deriveDiameter(drawing)
+
+/**
+ * Repair OCR errors in a Bakker Nedam drawing string using the known
+ * structural pattern. The format is:
+ *
+ *   NNN - LLL - NNNN - LL - NNN - L - N
+ *    │     │     │     │    │    │   │
+ *  digits letters digits letters digits letters digits
+ *
+ * Common OCR confusions land letters where digits should be (and
+ * vice versa) — "321-OIL-…" comes back as "321-01L-…", "322-INA-…"
+ * comes back as "322-1NA-…", etc. We walk each dash-separated part
+ * and apply the appropriate substitution to bring it back to spec.
+ *
+ * Substitution pairs (OCR-confused, both directions):
+ *   O ↔ 0     I ↔ 1     L → 1     S ↔ 5     B ↔ 8
+ *
+ * Drawings that don't follow the structure (different format, garbage,
+ * too few parts) pass through unchanged.
+ */
+fun normalizeDrawing(drawing: String): String {
+    val parts = drawing.split('-')
+    if (parts.size < 4) return drawing  // not the BN format, leave alone
+
+    // Char→char maps for the two directions.
+    fun toLetter(c: Char): Char = when (c) {
+        '0' -> 'O'; '1' -> 'I'; '5' -> 'S'; '8' -> 'B'
+        else -> c
+    }
+    fun toDigit(c: Char): Char = when (c) {
+        'O' -> '0'; 'I' -> '1'; 'L' -> '1'; 'S' -> '5'; 'B' -> '8'
+        else -> c
+    }
+    fun mapPart(s: String, lettersOnly: Boolean): String =
+        s.map { if (lettersOnly) toLetter(it) else toDigit(it) }.joinToString("")
+
+    // Position parity: even index → digits, odd index → letters.
+    //   parts[0] = 322            (digits)
+    //   parts[1] = FLA / OIL ...  (letters)
+    //   parts[2] = 1001           (digits)
+    //   parts[3] = SS / CS        (letters)
+    //   parts[4] = 100            (digits)
+    //   parts[5] = P / N / T      (letters)
+    //   parts[6] = 2 / 1.2 ...    (digits, may contain '.')
+    return parts.mapIndexed { i, p ->
+        if (p.isEmpty()) p
+        else mapPart(p, lettersOnly = (i % 2 == 1))
+    }.joinToString("-")
+}

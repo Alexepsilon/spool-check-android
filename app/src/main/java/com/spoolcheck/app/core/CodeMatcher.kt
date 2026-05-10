@@ -92,7 +92,9 @@ class CodeMatcher(
         val out = mutableListOf<Result>()
 
         val anchoredSpool: String? = findSpoolByAnchor(upper)
-        val anchoredDrawing: String? = findDrawingByAnchor(upper)
+        // Apply structural OCR normalization so common misreads
+        // ("321-01L-..." instead of "321-OIL-...") match the master.
+        val anchoredDrawing: String? = findDrawingByAnchor(upper)?.let { normalizeDrawing(it) }
 
         if (anchoredDrawing != null) {
             // If anchor didn't find a spool, fall back to "which of the
@@ -108,7 +110,7 @@ class CodeMatcher(
         // (e.g., from "Spoolnr. E") over a line-local lone letter,
         // since anchors are far more reliable than guessing.
         for (m in pattern.findAll(upper)) {
-            val drawing = m.value
+            val drawing = normalizeDrawing(m.value)
             val effectiveSpool = anchoredSpool
                 ?: spoolOnLineExcluding(upper, m.range.first, m.range.last + 1)
                 ?: findSpoolFromValidSet(upper, drawing)
@@ -164,7 +166,11 @@ class CodeMatcher(
     fun extractPreview(ocrText: String): LivePreview {
         if (ocrText.isEmpty()) return LivePreview()
         val upper = ocrText.uppercase()
-        val drawing = findDrawingByAnchor(upper) ?: pattern.find(upper)?.value
+        // Apply structural OCR normalization (digits-only / letters-only
+        // per position) so the live preview shows the corrected drawing
+        // rather than the OCR's literal misread.
+        val drawing = (findDrawingByAnchor(upper) ?: pattern.find(upper)?.value)
+            ?.let { normalizeDrawing(it) }
         // Anchor first; if that fails but we have a drawing, fall back to
         // intersecting OCR text with the master's valid spool letters
         // for that drawing — this is what surfaces the spool on tags

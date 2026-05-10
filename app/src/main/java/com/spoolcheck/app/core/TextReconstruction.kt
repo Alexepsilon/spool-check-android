@@ -92,7 +92,7 @@ fun extractDrawingSpoolPairs(mlText: com.google.mlkit.vision.text.Text):
             val cy = (box.top + box.bottom) / 2
             val upper = line.text.uppercase()
 
-            val drawing = drawingPattern.find(upper)?.value
+            val drawing = drawingPattern.find(upper)?.value?.let { normalizeDrawing(it) }
             if (drawing != null) {
                 drawings.add(Item(drawing, cy, height))
                 continue

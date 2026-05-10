@@ -201,7 +201,9 @@ object TransportListExtractor {
 
         // Sanity: drawing must roughly look like a drawing number.
         if (!DEFAULT_CODE_PATTERN.containsMatchIn(drawing.uppercase())) return null
-        val drawingMatch = DEFAULT_CODE_PATTERN.find(drawing.uppercase())?.value ?: return null
+        val drawingMatch = DEFAULT_CODE_PATTERN.find(drawing.uppercase())?.value
+            ?.let { normalizeDrawing(it) }
+            ?: return null
 
         val spoolRaw = byColumn["spool"]
         val spool = if (spoolRaw != null && spoolRaw.length <= 3) {
@@ -214,7 +216,7 @@ object TransportListExtractor {
             drawing = drawingMatch,
             spool = spool,
             isoNumber = byColumn["iso"]?.let {
-                DEFAULT_CODE_PATTERN.find(it.uppercase())?.value
+                DEFAULT_CODE_PATTERN.find(it.uppercase())?.value?.let { iso -> normalizeDrawing(iso) }
             },
             project = byColumn["project"]?.takeUnless { isPlaceholder(it) },
             diameter = byColumn["diameter"]?.takeUnless { isPlaceholder(it) },
