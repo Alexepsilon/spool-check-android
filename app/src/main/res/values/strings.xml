@@ -75,6 +75,7 @@
     <string name="scan_reading">READING</string>
     <string name="scan_aiming">aiming…</string>
     <string name="scan_on_list">on list ✓</string>
+    <string name="scan_already_verified">already verified ✓</string>
     <string name="scan_drawing_only">drawing on list, confirm spool</string>
     <string name="scan_off_list">off-list</string>
     <string name="scan_sheet_fmt">Sheet: %1$s</string>
@@ -113,6 +114,17 @@
     <string name="settings_haptic_title">Vibrate on match</string>
     <string name="settings_haptic_subtitle">Brief buzz when a tag is verified or added to Uncharted.</string>
     <string name="settings_scanner">Scanner</string>
+    <string name="scan_locked">Verified — ready for next tag</string>
+
+    <!-- Debug log -->
+    <string name="debug_log_title">Debug log</string>
+    <string name="debug_log_open">Open debug log</string>
+    <string name="debug_log_subtitle">Recent import / match / scan events for diagnostics.</string>
+    <string name="debug_log_copy">Copy</string>
+    <string name="debug_log_clear">Clear</string>
+    <string name="debug_log_copied">Log copied to clipboard</string>
+    <string name="debug_log_empty">Log is empty. Import a list or scan a tag and come back.</string>
+    <string name="debug_log_count_fmt">%1$d entries (newest first)</string>
 
     <!-- Uncharted -->
     <string name="uncharted_title">Uncharted items</string>

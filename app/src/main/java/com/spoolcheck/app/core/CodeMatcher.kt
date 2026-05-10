@@ -115,6 +115,16 @@ class CodeMatcher(
             resolve(drawing, effectiveSpool, hits)?.let { out.add(it) }
         }
 
+        // Diagnostic snapshot — only logs when there's something to say
+        // (an anchor or regex hit), to keep the log readable.
+        if (anchoredDrawing != null || anchoredSpool != null || out.isNotEmpty()) {
+            DebugLog.log("MATCH",
+                "anchorD=${anchoredDrawing ?: "-"} anchorS=${anchoredSpool ?: "-"} " +
+                    "→ ${out.size} result(s): " +
+                    out.joinToString { "${it.confidence.name}(${it.drawing}|${it.spool})" }
+                        .ifEmpty { "<none>" })
+        }
+
         return out
     }
 
@@ -333,10 +343,14 @@ class CodeMatcher(
         }
 
         if (s.isNotEmpty()) {
-            val available = mutableListOf<String>()
-            for ((key, entry) in byKey) {
-                if (key.startsWith("$drawing|")) available.add(entry.spool)
-            }
+            // Match by drawing only, regardless of how each row stored its
+            // spool — `key.startsWith("drawing|")` was missing rows whose
+            // composite key is just `drawing` (when an import failed to
+            // capture a spool letter). Falling through to off-list for a
+            // drawing that's clearly on the list was the symptom.
+            val available = byKey.values
+                .filter { it.drawing == drawing }
+                .map { it.spool }
             if (available.isNotEmpty()) {
                 return Result(drawing, s, drawing, Confidence.PARTIAL, availableSpools = available.sorted())
             }

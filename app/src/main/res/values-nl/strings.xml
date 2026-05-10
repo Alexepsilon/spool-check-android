@@ -75,6 +75,7 @@
     <string name="scan_reading">LEZEN</string>
     <string name="scan_aiming">richten…</string>
     <string name="scan_on_list">op lijst ✓</string>
+    <string name="scan_already_verified">reeds geverifieerd ✓</string>
     <string name="scan_drawing_only">tekening op lijst, bevestig spool</string>
     <string name="scan_off_list">niet op lijst</string>
     <string name="scan_sheet_fmt">Sheet: %1$s</string>
@@ -113,6 +114,17 @@
     <string name="settings_haptic_title">Trillen bij match</string>
     <string name="settings_haptic_subtitle">Korte buzz wanneer een tag is geverifieerd of toegevoegd aan Onbekend.</string>
     <string name="settings_scanner">Scanner</string>
+    <string name="scan_locked">Geverifieerd — klaar voor volgende</string>
+
+    <!-- Debug log -->
+    <string name="debug_log_title">Debug log</string>
+    <string name="debug_log_open">Debug log openen</string>
+    <string name="debug_log_subtitle">Recente import / match / scan gebeurtenissen voor diagnose.</string>
+    <string name="debug_log_copy">Kopieer</string>
+    <string name="debug_log_clear">Wissen</string>
+    <string name="debug_log_copied">Log gekopieerd naar klembord</string>
+    <string name="debug_log_empty">Log is leeg. Importeer een lijst of scan een tag en kom terug.</string>
+    <string name="debug_log_count_fmt">%1$d items (nieuwste bovenaan)</string>
 
     <!-- Uncharted -->
     <string name="uncharted_title">Onbekende items</string>

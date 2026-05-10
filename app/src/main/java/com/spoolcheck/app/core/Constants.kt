@@ -40,9 +40,16 @@ val SPOOL_HEADERS = listOf(
 )
 
 const val FRAME_CONSENSUS_COUNT = 2
-const val FRAME_CONSENSUS_WINDOW = 5
+const val FRAME_CONSENSUS_WINDOW = 8
 const val SCAN_DEBOUNCE_MS = 4000L
 const val OCR_FRAME_INTERVAL_MS = 250L
+
+// Off-list firing is intentionally slower than match commits. A single
+// poorly-lit frame can produce a regex-shaped read that doesn't match
+// the master, so we require N consistent off-list reads (~1.25s at the
+// 250ms frame interval) before the "Not on the list" dialog opens. Match
+// auto-tick stays at FRAME_CONSENSUS_COUNT (2) for snappy verification.
+const val OFFLIST_CONSENSUS_COUNT = 5
 
 /** Composite key helper. */
 fun composeKey(drawing: String, spool: String?): String {

@@ -100,6 +100,33 @@ fun SettingsScreen(nav: NavController) {
             }
 
             Spacer(Modifier.height(20.dp))
+            Text(stringResource(R.string.debug_log_title), style = MaterialTheme.typography.titleMedium)
+            Spacer(Modifier.height(6.dp))
+            Card {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(12.dp),
+                    verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            stringResource(R.string.debug_log_open),
+                            style = MaterialTheme.typography.bodyLarge,
+                        )
+                        Text(
+                            stringResource(R.string.debug_log_subtitle),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    TextButton(onClick = { nav.navigate("debug-log") }) {
+                        Text(stringResource(R.string.debug_log_title))
+                    }
+                }
+            }
+
+            Spacer(Modifier.height(20.dp))
             Text(stringResource(R.string.settings_about), style = MaterialTheme.typography.titleMedium)
             Spacer(Modifier.height(6.dp))
             Card {

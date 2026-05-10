@@ -34,16 +34,29 @@ object PhotoListImporter {
     suspend fun importFromUri(ctx: Context, uri: Uri): Result {
         val image = InputImage.fromFilePath(ctx, uri)
         val recognizer = TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS)
-        val text = try {
-            suspendCancellableCoroutine<String> { cont ->
+        // Two text views from the same OCR pass:
+        //   - flat: ML Kit's default, used for the "Note: TRANSPORT ..."
+        //     header extraction (one-off, layout doesn't matter).
+        //   - spatial: rows reconstructed by Y-grouping, used for the
+        //     row-by-row drawing+spool extraction. Real transport lists
+        //     can have wide column gaps which would otherwise make
+        //     ML Kit emit each cell on its own line — the importer
+        //     would then see drawing rows without their spool letter.
+        val (flatText, spatialText) = try {
+            suspendCancellableCoroutine<Pair<String, String>> { cont ->
                 recognizer.process(image)
-                    .addOnSuccessListener { cont.resume(it.text) }
+                    .addOnSuccessListener {
+                        cont.resume(it.text to reconstructSpatialText(it))
+                    }
                     .addOnFailureListener { cont.resumeWithException(it) }
             }
         } finally {
             recognizer.close()
         }
-        return Result(items = parseText(text), suggestedName = extractTransportName(text))
+        return Result(
+            items = parseText(spatialText),
+            suggestedName = extractTransportName(flatText),
+        )
     }
 
     /**
@@ -76,6 +89,8 @@ object PhotoListImporter {
         val seen = HashSet<String>()
         val pattern = Regex(DEFAULT_CODE_PATTERN.pattern)
 
+        DebugLog.log("IMPORT", "OCR ${text.length} chars, ${text.lines().size} lines")
+
         // Process line by line. OCR usually preserves rows.
         for (rawLine in text.split(Regex("[\\r\\n]+"))) {
             val line = rawLine.uppercase()
@@ -90,9 +105,13 @@ object PhotoListImporter {
                 val key = "$drawing|$spool"
                 if (seen.add(key)) {
                     out.add(XlsxImporter.Imported(drawing = drawing, spool = spool))
+                    DebugLog.log("IMPORT",
+                        "row → drawing=$drawing spool='${spool.ifEmpty { "<empty>" }}'  " +
+                            "from line: ${line.trim().take(80)}")
                 }
             }
         }
+        DebugLog.log("IMPORT", "parsed ${out.size} unique (drawing,spool) pairs")
         return out
     }
 }

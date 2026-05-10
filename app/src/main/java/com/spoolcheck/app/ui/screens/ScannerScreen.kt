@@ -88,12 +88,31 @@ fun ScannerScreen(nav: NavController, deliveryId: String) {
                 isoNumber = it.isoNumber.orEmpty(),
             )
         })
+        com.spoolcheck.app.core.DebugLog.log("SCAN",
+            "scanner ready, master=${items.size} items: " +
+                items.take(20).joinToString { "${it.drawing}|${it.spool.ifEmpty { "?" }}" } +
+                if (items.size > 20) "  …" else "")
     }
 
     var pending by remember { mutableStateOf<PendingFlow?>(null) }
     val feed = remember { mutableStateListOf<FeedEntry>() }
     var preview by remember { mutableStateOf(CodeMatcher.LivePreview()) }
     var matchKey by remember { mutableStateOf("") }
+
+    // Verification lock — after a successful match commit we pause the
+    // camera and clear sticky/buffer state for ~1.5s so old frame reads
+    // can't immediately fire a stale "Not on list" dialog while the user
+    // is still moving the phone toward the next tag.
+    var lockedUntil by remember { mutableStateOf(0L) }
+    var locked by remember { mutableStateOf(false) }
+    LaunchedEffect(lockedUntil) {
+        if (lockedUntil > 0L) {
+            locked = true
+            val remaining = lockedUntil - System.currentTimeMillis()
+            if (remaining > 0) kotlinx.coroutines.delay(remaining)
+            locked = false
+        }
+    }
 
     // Sticky-field state per-field. Each field remembers its last
     // non-empty value with a timestamp; if it goes ~4 seconds without
@@ -113,6 +132,16 @@ fun ScannerScreen(nav: NavController, deliveryId: String) {
         matchKey = ""
     }
 
+    // Arm the verification lock — pauses the camera + clears state so a
+    // stale frame can't immediately fire a "Not on list" right after the
+    // user confirmed a real match. The visual ✓ overlay makes the gap
+    // obvious so the user knows when scanning is armed for the next tag.
+    fun armLock(durationMs: Long = 1500L) {
+        resetSticky()
+        accumDebounce.clear()
+        lockedUntil = System.currentTimeMillis() + durationMs
+    }
+
     val verified = items.count { it.status == "verified" }
     val total = items.size
 
@@ -121,7 +150,7 @@ fun ScannerScreen(nav: NavController, deliveryId: String) {
             if (permissionGranted && matcher != null) {
                 CameraPreviewWithOcr(
                     matcher = matcher!!,
-                    paused = pending != null,
+                    paused = pending != null || locked,
                     onPreview = { p ->
                         val now = System.currentTimeMillis()
                         val staleMs = 4_000L
@@ -189,13 +218,26 @@ fun ScannerScreen(nav: NavController, deliveryId: String) {
                         val last = feed.firstOrNull { it.key == key }?.time ?: 0L
                         if (now - last < SCAN_DEBOUNCE_MS) return@CameraPreviewWithOcr
 
+                        // Already-verified guard: if the matched master row is
+                        // already verified (we landed on the same tag again, or
+                        // the user was scanning over a row that was hand-marked
+                        // verified earlier), don't reopen the dialog. Live
+                        // preview already shows "verified ✓" for visible
+                        // feedback; we just skip silently.
+                        val matchedItem = items.find { it.id == result.itemId }
+                        if (matchedItem?.status == "verified") {
+                            com.spoolcheck.app.core.DebugLog.log("SCAN",
+                                "skip already-verified ${result.drawing}|${result.spool}")
+                            return@CameraPreviewWithOcr
+                        }
+
                         val snapshot = preview
                         when (result.confidence) {
                             CodeMatcher.Confidence.EXACT -> {
-                                pending = PendingFlow.MatchFound(result, items.find { it.id == result.itemId }, snapshot)
+                                pending = PendingFlow.MatchFound(result, matchedItem, snapshot)
                             }
                             CodeMatcher.Confidence.FUZZY -> {
-                                pending = PendingFlow.Fuzzy(result, items.find { it.id == result.itemId }, snapshot)
+                                pending = PendingFlow.Fuzzy(result, matchedItem, snapshot)
                             }
                             CodeMatcher.Confidence.PARTIAL -> {
                                 pending = PendingFlow.Partial(result, snapshot)
@@ -207,6 +249,13 @@ fun ScannerScreen(nav: NavController, deliveryId: String) {
                         val now = System.currentTimeMillis()
                         val last = feed.firstOrNull { it.key == key }?.time ?: 0L
                         if (now - last < SCAN_DEBOUNCE_MS) return@CameraPreviewWithOcr
+                        com.spoolcheck.app.core.DebugLog.log("SCAN",
+                            "off-list dialog → drawing=$drawing spool='${spool.ifEmpty { "?" }}'  " +
+                                "(master has " +
+                                "${items.count { it.drawing == drawing }} row(s) for this drawing: " +
+                                items.filter { it.drawing == drawing }
+                                    .joinToString { "spool=${it.spool.ifEmpty { "<empty>" }}" } +
+                                ")")
                         pending = PendingFlow.NotFound(drawing, spool, rawText, preview)
                     },
                 )
@@ -249,11 +298,36 @@ fun ScannerScreen(nav: NavController, deliveryId: String) {
                 )
             }
 
-            // Reticle
+            // Reticle — turns green while the verification lock is active.
+            val reticleColor = if (locked) StatusVerified else Color.White.copy(alpha = 0.7f)
             Box(
                 modifier = Modifier.align(Alignment.Center).size(width = 320.dp, height = 200.dp)
-                    .border(2.dp, Color.White.copy(alpha = 0.7f), RoundedCornerShape(8.dp)),
-            )
+                    .border(if (locked) 4.dp else 2.dp, reticleColor, RoundedCornerShape(8.dp)),
+                contentAlignment = Alignment.Center,
+            ) {
+                if (locked) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text(
+                            "✓",
+                            color = StatusVerified,
+                            fontSize = 96.sp,
+                            fontWeight = FontWeight.Bold,
+                        )
+                        Text(
+                            stringResource(R.string.scan_locked),
+                            color = Color.White,
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            modifier = Modifier
+                                .background(
+                                    Color.Black.copy(alpha = 0.6f),
+                                    RoundedCornerShape(4.dp),
+                                )
+                                .padding(horizontal = 8.dp, vertical = 4.dp),
+                        )
+                    }
+                }
+            }
 
             // Feed
             Column(
@@ -317,6 +391,7 @@ fun ScannerScreen(nav: NavController, deliveryId: String) {
                         time = scan.timestamp,
                         status = "verified",
                     ))
+                    armLock()
                 }
             },
             onPickSpool = { drawing, spool ->
@@ -345,6 +420,7 @@ fun ScannerScreen(nav: NavController, deliveryId: String) {
                         time = scan.timestamp,
                         status = "verified",
                     ))
+                    armLock()
                 }
             },
             onAddUncharted = { drawing, spool, rawText, sheet ->
@@ -383,6 +459,7 @@ fun ScannerScreen(nav: NavController, deliveryId: String) {
                             time = now,
                             status = "uncharted",
                         ))
+                        armLock()
                     } catch (e: Throwable) {
                         android.util.Log.e("Scanner", "Add to Uncharted failed", e)
                         android.widget.Toast.makeText(
@@ -457,11 +534,15 @@ private fun LivePreviewCard(
     matchKey: String,
     items: List<MasterItem>,
 ) {
+    val matchedItem = items.firstOrNull {
+        it.drawing == preview.drawing && it.spool == preview.spool
+    }
+    val onListExact = preview.drawing.isNotEmpty() && matchedItem != null
+    val alreadyVerified = matchedItem?.status == "verified"
     val onListByDrawing = preview.drawing.isNotEmpty() &&
         items.any { it.drawing == preview.drawing }
-    val onListExact = preview.drawing.isNotEmpty() &&
-        items.any { it.drawing == preview.drawing && it.spool == preview.spool }
     val borderColor = when {
+        alreadyVerified -> Color(0xFF22C55E) // brighter green for already-done
         onListExact -> StatusVerified
         onListByDrawing -> Color(0xFFF59E0B)  // amber: drawing on list, spool unsure
         preview.drawing.isNotEmpty() -> Color(0xFFDC2626) // red: not on list
@@ -490,6 +571,7 @@ private fun LivePreviewCard(
                 } else {
                     Text(
                         when {
+                            alreadyVerified -> stringResource(R.string.scan_already_verified)
                             onListExact -> stringResource(R.string.scan_on_list)
                             onListByDrawing -> stringResource(R.string.scan_drawing_only)
                             preview.drawing.isNotEmpty() -> stringResource(R.string.scan_off_list)
@@ -646,7 +728,11 @@ private fun PendingDialog(
                 if (flow.result.spool.isNotEmpty()) listOf(flow.result.spool) else emptyList()
             }
             AlertDialog(
-                onDismissRequest = onDismiss,
+                onDismissRequest = { /* locked — explicit buttons only */ },
+                properties = androidx.compose.ui.window.DialogProperties(
+                    dismissOnBackPress = false,
+                    dismissOnClickOutside = false,
+                ),
                 title = { Text(stringResource(R.string.scan_match_found)) },
                 text = {
                     Column {
@@ -755,7 +841,11 @@ private fun PendingDialog(
             )
         }
         is PendingFlow.Fuzzy -> AlertDialog(
-            onDismissRequest = onDismiss,
+            onDismissRequest = { /* locked */ },
+            properties = androidx.compose.ui.window.DialogProperties(
+                dismissOnBackPress = false,
+                dismissOnClickOutside = false,
+            ),
             title = { Text(stringResource(R.string.scan_confirm_scan)) },
             text = {
                 Column {
@@ -777,7 +867,11 @@ private fun PendingDialog(
             dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.no)) } },
         )
         is PendingFlow.Partial -> AlertDialog(
-            onDismissRequest = onDismiss,
+            onDismissRequest = { /* locked */ },
+            properties = androidx.compose.ui.window.DialogProperties(
+                dismissOnBackPress = false,
+                dismissOnClickOutside = false,
+            ),
             title = { Text(stringResource(R.string.scan_which_spool)) },
             text = {
                 Column {
@@ -801,7 +895,11 @@ private fun PendingDialog(
             var drawing by remember(flow) { mutableStateOf(flow.drawing) }
             var spool by remember(flow) { mutableStateOf(flow.spool) }
             AlertDialog(
-                onDismissRequest = onDismiss,
+                onDismissRequest = { /* locked */ },
+                properties = androidx.compose.ui.window.DialogProperties(
+                    dismissOnBackPress = false,
+                    dismissOnClickOutside = false,
+                ),
                 title = { Text(stringResource(R.string.scan_not_on_list)) },
                 text = {
                     Column {
@@ -859,6 +957,19 @@ private fun CameraPreviewWithOcr(
     val offListBuf = remember { mutableListOf<String>() }
     val offListText = remember { mutableMapOf<String, String>() }
     var lastFrameAt by remember { mutableStateOf(0L) }
+
+    // When the scanner pauses (dialog open or verification lock active),
+    // wipe the consensus + off-list buffers. Otherwise frames captured
+    // right before the pause sit in the buffer and can fire a stale
+    // commit / off-list dialog the moment the camera resumes.
+    LaunchedEffect(paused) {
+        if (paused) {
+            consensusBuf.clear()
+            candidates.clear()
+            offListBuf.clear()
+            offListText.clear()
+        }
+    }
 
     DisposableEffect(Unit) {
         onDispose {
@@ -986,8 +1097,8 @@ private fun processFrame(
                 while (offListBuf.size > FRAME_CONSENSUS_WINDOW) offListBuf.removeAt(0)
                 if (isOff) offListText[first!!] = text
 
-                if (offListBuf.size >= FRAME_CONSENSUS_COUNT) {
-                    val recent = offListBuf.takeLast(FRAME_CONSENSUS_COUNT)
+                if (offListBuf.size >= com.spoolcheck.app.core.OFFLIST_CONSENSUS_COUNT) {
+                    val recent = offListBuf.takeLast(com.spoolcheck.app.core.OFFLIST_CONSENSUS_COUNT)
                     val firstRecent = recent[0]
                     if (firstRecent.isNotEmpty() && recent.all { it == firstRecent }) {
                         val key = "offlist:$firstRecent"

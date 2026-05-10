@@ -14,6 +14,7 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.spoolcheck.app.ui.SpoolCheckTheme
+import com.spoolcheck.app.ui.screens.DebugLogScreen
 import com.spoolcheck.app.ui.screens.HomeScreen
 import com.spoolcheck.app.ui.screens.ImportScreen
 import com.spoolcheck.app.ui.screens.ScannerScreen
@@ -63,5 +64,6 @@ fun AppNav() {
             UnchartedScreen(nav, backStack.arguments?.getString("deliveryId") ?: return@composable)
         }
         composable("settings") { SettingsScreen(nav) }
+        composable("debug-log") { DebugLogScreen(nav) }
     }
 }
