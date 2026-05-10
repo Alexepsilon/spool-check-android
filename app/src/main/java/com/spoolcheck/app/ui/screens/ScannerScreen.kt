@@ -107,6 +107,10 @@ fun ScannerScreen(nav: NavController, deliveryId: String) {
     var locked by remember { mutableStateOf(false) }
     LaunchedEffect(lockedUntil) {
         if (lockedUntil > 0L) {
+            // `locked` is also set synchronously inside armLock() — this
+            // effect only handles the unlock after the delay. Setting it
+            // here too is harmless and keeps state coherent if the
+            // effect runs first for some reason.
             locked = true
             val remaining = lockedUntil - System.currentTimeMillis()
             if (remaining > 0) kotlinx.coroutines.delay(remaining)
@@ -133,12 +137,16 @@ fun ScannerScreen(nav: NavController, deliveryId: String) {
     }
 
     // Arm the verification lock — pauses the camera + clears state so a
-    // stale frame can't immediately fire a "Not on list" right after the
-    // user confirmed a real match. The visual ✓ overlay makes the gap
-    // obvious so the user knows when scanning is armed for the next tag.
+    // stale frame can't immediately fire a "Not on list" or duplicate
+    // "Match found" right after the user confirmed. The visual ✓
+    // overlay makes the gap obvious. Critically, we set `locked = true`
+    // synchronously here (not via the LaunchedEffect) so the very next
+    // OCR frame after a Confirm-click already sees paused=true and
+    // doesn't slip a duplicate match in before the DB update completes.
     fun armLock(durationMs: Long = 1500L) {
         resetSticky()
         accumDebounce.clear()
+        locked = true
         lockedUntil = System.currentTimeMillis() + durationMs
     }
 
@@ -218,16 +226,29 @@ fun ScannerScreen(nav: NavController, deliveryId: String) {
                         val last = feed.firstOrNull { it.key == key }?.time ?: 0L
                         if (now - last < SCAN_DEBOUNCE_MS) return@CameraPreviewWithOcr
 
-                        // Already-verified guard: if the matched master row is
-                        // already verified (we landed on the same tag again, or
-                        // the user was scanning over a row that was hand-marked
-                        // verified earlier), don't reopen the dialog. Live
-                        // preview already shows "verified ✓" for visible
-                        // feedback; we just skip silently.
+                        // Already-verified guard. Two cases distinguished by
+                        // whether the OCR-read spool matches the master row's
+                        // stored spool:
+                        //   - Same letter (or empty result.spool) → same
+                        //     physical tag re-read → silent skip.
+                        //   - Different letter → this is a *sibling* physical
+                        //     tag for a drawing whose master only had one row
+                        //     (e.g. wildcard match consumed it). Route to
+                        //     off-list so the user can park this tag in
+                        //     Uncharted; otherwise siblings vanish silently.
                         val matchedItem = items.find { it.id == result.itemId }
                         if (matchedItem?.status == "verified") {
+                            val sameLetter = result.spool.isEmpty() ||
+                                result.spool == matchedItem.spool
+                            if (sameLetter) {
+                                com.spoolcheck.app.core.DebugLog.log("SCAN",
+                                    "skip already-verified ${result.drawing}|${result.spool}")
+                                return@CameraPreviewWithOcr
+                            }
                             com.spoolcheck.app.core.DebugLog.log("SCAN",
-                                "skip already-verified ${result.drawing}|${result.spool}")
+                                "verified row has different spool — off-list " +
+                                    "(master='${matchedItem.spool.ifEmpty { "<empty>" }}', scanned='${result.spool}')")
+                            pending = PendingFlow.NotFound(result.drawing, result.spool, null, preview)
                             return@CameraPreviewWithOcr
                         }
 
@@ -365,6 +386,9 @@ fun ScannerScreen(nav: NavController, deliveryId: String) {
             onDismiss = { pending = null },
             onConfirm = { result ->
                 pending = null
+                // Arm the lock synchronously so in-flight ML Kit frames
+                // can't open another dialog while DB writes are running.
+                armLock()
                 scope.launchSafe(ctx, "Scanner.onConfirm") {
                     val scan = Scan(
                         id = UUID.randomUUID().toString(),
@@ -377,7 +401,15 @@ fun ScannerScreen(nav: NavController, deliveryId: String) {
                         confirmed = true,
                     )
                     db.scans().insert(scan)
+                    // Two-route lookup: prefer (deliveryId, drawing, spool)
+                    // for the typical exact-match path, but fall back to
+                    // result.itemId so the wildcard / iso-redirect paths
+                    // (where result.spool may not equal master's stored
+                    // spool) still update the right row. Without this
+                    // fallback, the wildcard match silently fails to mark
+                    // the row verified and a re-scan reopens the dialog.
                     val mi = db.items().findByKey(deliveryId, result.drawing, result.spool)
+                        ?: items.firstOrNull { it.id == result.itemId }
                     if (mi != null) {
                         db.items().update(mi.copy(
                             status = "verified",
@@ -391,13 +423,29 @@ fun ScannerScreen(nav: NavController, deliveryId: String) {
                         time = scan.timestamp,
                         status = "verified",
                     ))
-                    armLock()
                 }
             },
-            onPickSpool = { drawing, spool ->
+            onPickSpool = { drawing, spool, fallbackItemId ->
                 pending = null
+                // Arm the lock synchronously so any in-flight ML Kit frames
+                // can't fire a duplicate dialog between this click and the
+                // DB write completing (fixes the stale-items race).
+                armLock()
                 scope.launchSafe(ctx, "Scanner.onPickSpool") {
-                    val mi = db.items().findByKey(deliveryId, drawing, spool) ?: return@launchSafe
+                    // Two-route lookup mirroring onConfirm: prefer the
+                    // (drawing, spool) row; fall back to the matcher's
+                    // result.itemId so a picker tap that doesn't map to a
+                    // real master row (custom-typed spool, or master row
+                    // with empty spool) still verifies *something* rather
+                    // than silently doing nothing.
+                    val mi = db.items().findByKey(deliveryId, drawing, spool)
+                        ?: fallbackItemId?.let { id -> items.firstOrNull { it.id == id } }
+                    if (mi == null) {
+                        com.spoolcheck.app.core.DebugLog.log("SCAN",
+                            "onPickSpool: no master row for $drawing|$spool — routing to off-list")
+                        pending = PendingFlow.NotFound(drawing, spool, null, preview)
+                        return@launchSafe
+                    }
                     val scan = Scan(
                         id = UUID.randomUUID().toString(),
                         timestamp = System.currentTimeMillis(),
@@ -420,11 +468,11 @@ fun ScannerScreen(nav: NavController, deliveryId: String) {
                         time = scan.timestamp,
                         status = "verified",
                     ))
-                    armLock()
                 }
             },
             onAddUncharted = { drawing, spool, rawText, sheet ->
                 pending = null
+                armLock()
                 scope.launch {
                     try {
                         val now = System.currentTimeMillis()
@@ -459,7 +507,6 @@ fun ScannerScreen(nav: NavController, deliveryId: String) {
                             time = now,
                             status = "uncharted",
                         ))
-                        armLock()
                     } catch (e: Throwable) {
                         android.util.Log.e("Scanner", "Add to Uncharted failed", e)
                         android.widget.Toast.makeText(
@@ -707,12 +754,36 @@ private sealed class PendingFlow {
     ) : PendingFlow()
 }
 
+/**
+ * Title row with a built-in X close icon. The X always calls onDismiss
+ * — useful when a dialog pops up at an inconvenient moment and the
+ * user wants out without picking any of the explicit action buttons.
+ */
+@Composable
+private fun DialogTitleRow(title: String, onDismiss: () -> Unit) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(title, modifier = Modifier.weight(1f))
+        IconButton(
+            onClick = onDismiss,
+            modifier = Modifier.size(32.dp),
+        ) {
+            Icon(
+                Icons.Default.Close,
+                contentDescription = stringResource(R.string.close),
+            )
+        }
+    }
+}
+
 @Composable
 private fun PendingDialog(
     flow: PendingFlow,
     onDismiss: () -> Unit,
     onConfirm: (CodeMatcher.Result) -> Unit,
-    onPickSpool: (drawing: String, spool: String) -> Unit,
+    onPickSpool: (drawing: String, spool: String, fallbackItemId: String?) -> Unit,
     onAddUncharted: (drawing: String, spool: String, rawText: String?, sheet: String?) -> Unit,
 ) {
     when (flow) {
@@ -733,7 +804,7 @@ private fun PendingDialog(
                     dismissOnBackPress = false,
                     dismissOnClickOutside = false,
                 ),
-                title = { Text(stringResource(R.string.scan_match_found)) },
+                title = { DialogTitleRow(stringResource(R.string.scan_match_found), onDismiss) },
                 text = {
                     Column {
                         Text(
@@ -827,7 +898,7 @@ private fun PendingDialog(
                             // the spool-pick path so the right master row gets
                             // verified.
                             if (chosenSpool != flow.result.spool) {
-                                onPickSpool(flow.result.drawing, chosenSpool)
+                                onPickSpool(flow.result.drawing, chosenSpool, flow.result.itemId)
                             } else {
                                 onConfirm(flow.result)
                             }
@@ -846,7 +917,7 @@ private fun PendingDialog(
                 dismissOnBackPress = false,
                 dismissOnClickOutside = false,
             ),
-            title = { Text(stringResource(R.string.scan_confirm_scan)) },
+            title = { DialogTitleRow(stringResource(R.string.scan_confirm_scan), onDismiss) },
             text = {
                 Column {
                     Text(stringResource(R.string.scan_ocr_uncertain), fontSize = 13.sp)
@@ -872,7 +943,7 @@ private fun PendingDialog(
                 dismissOnBackPress = false,
                 dismissOnClickOutside = false,
             ),
-            title = { Text(stringResource(R.string.scan_which_spool)) },
+            title = { DialogTitleRow(stringResource(R.string.scan_which_spool), onDismiss) },
             text = {
                 Column {
                     Text(flow.result.drawing, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.SemiBold)
@@ -881,7 +952,7 @@ private fun PendingDialog(
                     Spacer(Modifier.height(8.dp))
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         flow.result.availableSpools.forEach { s ->
-                            OutlinedButton(onClick = { onPickSpool(flow.result.drawing, s) }) {
+                            OutlinedButton(onClick = { onPickSpool(flow.result.drawing, s, flow.result.itemId) }) {
                                 Text(s, fontFamily = FontFamily.Monospace, fontSize = 18.sp)
                             }
                         }
@@ -900,7 +971,7 @@ private fun PendingDialog(
                     dismissOnBackPress = false,
                     dismissOnClickOutside = false,
                 ),
-                title = { Text(stringResource(R.string.scan_not_on_list)) },
+                title = { DialogTitleRow(stringResource(R.string.scan_not_on_list), onDismiss) },
                 text = {
                     Column {
                         Text(stringResource(R.string.scan_edit_then_add), fontSize = 13.sp)
@@ -958,22 +1029,43 @@ private fun CameraPreviewWithOcr(
     val offListText = remember { mutableMapOf<String, String>() }
     var lastFrameAt by remember { mutableStateOf(0L) }
 
+    // `paused` is a function parameter, captured by value when the
+    // AndroidView factory below builds the analyzer lambda — and factory
+    // only runs once. To make the analyzer actually respect parameter
+    // changes on later recompositions, we mirror the flag into an
+    // AtomicBoolean and update it on every recomposition. The analyzer
+    // (running on its background executor) reads the atomic.
+    val pausedRef = remember { java.util.concurrent.atomic.AtomicBoolean(paused) }
+    SideEffect { pausedRef.set(paused) }
+
     // When the scanner pauses (dialog open or verification lock active),
-    // wipe the consensus + off-list buffers. Otherwise frames captured
-    // right before the pause sit in the buffer and can fire a stale
-    // commit / off-list dialog the moment the camera resumes.
+    // wipe the consensus + off-list buffers AND the recentCommits
+    // debounce map. Otherwise (a) frames captured right before the
+    // pause can fire a stale commit/off-list dialog the moment the
+    // camera resumes, and (b) recentCommits would grow unbounded over
+    // a long shift.
     LaunchedEffect(paused) {
         if (paused) {
             consensusBuf.clear()
             candidates.clear()
             offListBuf.clear()
             offListText.clear()
+            // Prune old commit timestamps (>60s); keep recent so the
+            // 4s same-key debounce still works after resume.
+            val cutoff = System.currentTimeMillis() - 60_000L
+            recentCommits.entries.removeAll { it.value < cutoff }
         }
     }
 
     DisposableEffect(Unit) {
+        // Tearing down: pause analysis, drop frame buffers, and stop
+        // the camera. Without unbindAll() a fresh scan session that
+        // rebinds CameraX could leave two preview pipelines alive.
         onDispose {
-            executor.shutdown()
+            try {
+                ProcessCameraProvider.getInstance(ctx).get().unbindAll()
+            } catch (_: Throwable) { /* provider may already be torn down */ }
+            executor.shutdownNow()
             recognizer.close()
         }
     }
@@ -992,7 +1084,7 @@ private fun CameraPreviewWithOcr(
                     .build()
                 analysis.setAnalyzer(executor) { proxy ->
                     val now = System.currentTimeMillis()
-                    if (paused || now - lastFrameAt < OCR_FRAME_INTERVAL_MS) {
+                    if (pausedRef.get() || now - lastFrameAt < OCR_FRAME_INTERVAL_MS) {
                         proxy.close()
                         return@setAnalyzer
                     }
@@ -1006,6 +1098,7 @@ private fun CameraPreviewWithOcr(
                         recentCommits = recentCommits,
                         offListBuf = offListBuf,
                         offListText = offListText,
+                        pausedRef = pausedRef,
                         onPreview = onPreview,
                         onMatch = onMatch,
                         onOffList = onOffList,
@@ -1034,6 +1127,7 @@ private fun processFrame(
     recentCommits: MutableMap<String, Long>,
     offListBuf: MutableList<String>,
     offListText: MutableMap<String, String>,
+    pausedRef: java.util.concurrent.atomic.AtomicBoolean,
     onPreview: (CodeMatcher.LivePreview) -> Unit,
     onMatch: (CodeMatcher.Result) -> Unit,
     onOffList: (String, String, String) -> Unit,
@@ -1055,6 +1149,11 @@ private fun processFrame(
             android.util.Log.w("Scanner", "ML Kit recognize failed: ${e.message}")
         }
         .addOnSuccessListener { result ->
+            // In-flight guard: a frame submitted to ML Kit before pause
+            // was set will still complete here. Drop its result if we're
+            // paused now — otherwise it would fire onMatch/onOffList
+            // and open a duplicate dialog after Confirm.
+            if (pausedRef.get()) return@addOnSuccessListener
             try {
             // Spatial reconstruction first: stitches blocks/lines that
             // ML Kit split apart back into logical rows so cell-layout
@@ -1090,9 +1189,18 @@ private fun processFrame(
             // Off-list detection
             if (committable.isEmpty()) {
                 val pat = com.spoolcheck.app.core.DEFAULT_CODE_PATTERN
-                val matched = matches.map { composeKey(it.drawing, it.spool) }.toSet()
+                // Include both `drawing` (canonical, may be iso-redirected
+                // from a different observed string) and `observed` (the
+                // raw regex hit) so an iso-redirect doesn't false-fire
+                // off-list when the regex's first hit is the iso number
+                // and the matcher returned its mapped drawing.
+                val matched = matches.flatMap {
+                    listOf(composeKey(it.drawing, it.spool), it.observed)
+                }.toSet()
                 val first = pat.find(text.uppercase())?.value
-                val isOff = first != null && matched.none { it == first || it.startsWith("$first|") }
+                val isOff = first != null && matched.none {
+                    it == first || it.startsWith("$first|")
+                }
                 offListBuf.add(if (isOff) first!! else "")
                 while (offListBuf.size > FRAME_CONSENSUS_WINDOW) offListBuf.removeAt(0)
                 if (isOff) offListText[first!!] = text

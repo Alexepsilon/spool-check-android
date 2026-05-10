@@ -343,16 +343,29 @@ class CodeMatcher(
         }
 
         if (s.isNotEmpty()) {
-            // Match by drawing only, regardless of how each row stored its
-            // spool — `key.startsWith("drawing|")` was missing rows whose
-            // composite key is just `drawing` (when an import failed to
-            // capture a spool letter). Falling through to off-list for a
-            // drawing that's clearly on the list was the symptom.
-            val available = byKey.values
-                .filter { it.drawing == drawing }
-                .map { it.spool }
-            if (available.isNotEmpty()) {
-                return Result(drawing, s, drawing, Confidence.PARTIAL, availableSpools = available.sorted())
+            val rowsForDrawing = byKey.values.filter { it.drawing == drawing }
+            val realVariants = rowsForDrawing.filter { it.spool.isNotEmpty() }.map { it.spool }
+            val hasEmptyRow = rowsForDrawing.any { it.spool.isEmpty() }
+
+            // Wildcard: master has only (drawing, "") rows — likely an
+            // import that captured drawings but missed spool letters.
+            // Treat the OCR-read spool as authoritative against the
+            // empty-spool row instead of dead-ending the user on a
+            // "Which spool?" dialog with no real chips. The custom-spool
+            // input on the confirm dialog still lets them override.
+            if (realVariants.isEmpty() && hasEmptyRow) {
+                byKey[drawing]?.let { entry ->
+                    if (!hits.add(drawing)) return null
+                    return Result(drawing, s, drawing, Confidence.EXACT, entry.itemId)
+                }
+            }
+
+            // Otherwise: drawing has at least one real spool variant in
+            // the master — show the picker with only the *real* variants
+            // (filter out the placeholder empty-spool rows so they don't
+            // render as blank chips).
+            if (realVariants.isNotEmpty()) {
+                return Result(drawing, s, drawing, Confidence.PARTIAL, availableSpools = realVariants.sorted())
             }
         }
 

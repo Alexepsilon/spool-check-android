@@ -34,29 +34,106 @@ object PhotoListImporter {
     suspend fun importFromUri(ctx: Context, uri: Uri): Result {
         val image = InputImage.fromFilePath(ctx, uri)
         val recognizer = TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS)
-        // Two text views from the same OCR pass:
-        //   - flat: ML Kit's default, used for the "Note: TRANSPORT ..."
-        //     header extraction (one-off, layout doesn't matter).
-        //   - spatial: rows reconstructed by Y-grouping, used for the
-        //     row-by-row drawing+spool extraction. Real transport lists
-        //     can have wide column gaps which would otherwise make
-        //     ML Kit emit each cell on its own line — the importer
-        //     would then see drawing rows without their spool letter.
-        val (flatText, spatialText) = try {
-            suspendCancellableCoroutine<Pair<String, String>> { cont ->
+        // Four views of the same OCR pass:
+        //   - flat: ML Kit's default text(), used for the
+        //     "Note: TRANSPORT ..." header extraction.
+        //   - table rows: column-aware extractor that locates the header
+        //     row and snaps cells to columns by X-center, producing
+        //     fully-populated rows (drawing, spool, iso, diameter, ral,
+        //     paint, ch.clean, remark, project).
+        //   - spatial pairs: drawing/spool tuples paired by Y-coordinate
+        //     directly from ML Kit bounding boxes — used as fallback for
+        //     non-tabular layouts (e.g. tag photos used as a list).
+        //   - reconstructed text: text-line fallback if both above miss.
+        data class FourViews(
+            val flat: String,
+            val tableRows: List<TransportListExtractor.Row>,
+            val pairs: List<Pair<String, String>>,
+            val spatial: String,
+        )
+        val r = try {
+            suspendCancellableCoroutine<FourViews> { cont ->
                 recognizer.process(image)
                     .addOnSuccessListener {
-                        cont.resume(it.text to reconstructSpatialText(it))
+                        cont.resume(
+                            FourViews(
+                                flat = it.text,
+                                tableRows = TransportListExtractor.extract(it),
+                                pairs = extractDrawingSpoolPairs(it),
+                                spatial = reconstructSpatialText(it),
+                            )
+                        )
                     }
                     .addOnFailureListener { cont.resumeWithException(it) }
             }
         } finally {
             recognizer.close()
         }
-        return Result(
-            items = parseText(spatialText),
-            suggestedName = extractTransportName(flatText),
-        )
+
+        // Use the column-aware table rows as primary if we got any.
+        // They carry all fields (diameter, paint, ral, ch.clean, etc.).
+        // Otherwise fall back to spatial pairs + text-parsed merge.
+        val items: List<XlsxImporter.Imported> = if (r.tableRows.isNotEmpty()) {
+            DebugLog.log("IMPORT", "primary: column-aware ${r.tableRows.size} rows")
+            dedupNormalised(r.tableRows.map {
+                XlsxImporter.Imported(
+                    drawing = it.drawing,
+                    spool = it.spool,
+                    isoNumber = it.isoNumber,
+                    project = it.project,
+                    diameter = it.diameter,
+                    paintSpec = it.paintSpec,
+                    ral = it.ral,
+                    chClean = it.chClean,
+                    remark = it.remark,
+                )
+            })
+        } else {
+            DebugLog.log("IMPORT",
+                "no table detected — fallback to spatial pairs + text parse")
+            mergePairsAndText(r.pairs, parseText(r.spatial))
+        }
+        DebugLog.log("IMPORT",
+            "final ${items.size} items: " +
+                items.take(15).joinToString { "${it.drawing}|${it.spool.ifEmpty { "?" }}" } +
+                if (items.size > 15) "  …" else "")
+        return Result(items = items, suggestedName = extractTransportName(r.flat))
+    }
+
+    /** Collapse OCR-confused-char duplicates on a list of Imported. */
+    private fun dedupNormalised(rows: List<XlsxImporter.Imported>): List<XlsxImporter.Imported> {
+        val seen = HashSet<String>()
+        val out = mutableListOf<XlsxImporter.Imported>()
+        for (row in rows) {
+            val key = CodeMatcher.normalise("${row.drawing}|${row.spool}")
+            if (seen.add(key)) out.add(row)
+        }
+        return out
+    }
+
+    /**
+     * Combine spatial pairs (primary) with text-parsed pairs (backstop).
+     * For each drawing, prefer the spatial result. If spatial returned
+     * spool="" but text parsing found a non-empty spool for the same
+     * drawing, take the text parser's spool. Dedup with normalised key.
+     */
+    private fun mergePairsAndText(
+        spatial: List<Pair<String, String>>,
+        text: List<XlsxImporter.Imported>,
+    ): List<XlsxImporter.Imported> {
+        val out = mutableListOf<XlsxImporter.Imported>()
+        val seen = HashSet<String>()
+        for ((drawing, spool) in spatial) {
+            val canon = CodeMatcher.normalise("$drawing|$spool")
+            if (seen.add(canon)) {
+                out.add(XlsxImporter.Imported(drawing = drawing, spool = spool))
+            }
+        }
+        for (t in text) {
+            val canon = CodeMatcher.normalise("${t.drawing}|${t.spool}")
+            if (seen.add(canon)) out.add(t)
+        }
+        return out
     }
 
     /**
@@ -88,11 +165,21 @@ object PhotoListImporter {
         val out = mutableListOf<XlsxImporter.Imported>()
         val seen = HashSet<String>()
         val pattern = Regex(DEFAULT_CODE_PATTERN.pattern)
+        val lines = text.split(Regex("[\\r\\n]+"))
 
-        DebugLog.log("IMPORT", "OCR ${text.length} chars, ${text.lines().size} lines")
+        DebugLog.log("IMPORT", "OCR ${text.length} chars, ${lines.size} lines")
 
-        // Process line by line. OCR usually preserves rows.
-        for (rawLine in text.split(Regex("[\\r\\n]+"))) {
+        // Pre-scan: find every "bare letter" line (a line that is just
+        // one A-Z letter once trimmed). When ML Kit splits a row's cells
+        // onto separate lines, the spool value lands on its own line.
+        // We pair each drawing-line with the nearest unused bare letter.
+        val bareLetters: MutableList<Pair<Int, String>> = lines
+            .mapIndexedNotNull { idx, l ->
+                CodeMatcher.bareLetterLine(l.uppercase())?.let { idx to it }
+            }
+            .toMutableList()
+
+        for ((rawIdx, rawLine) in lines.withIndex()) {
             val line = rawLine.uppercase()
             for (match in pattern.findAll(line)) {
                 val drawing = match.value
@@ -101,9 +188,29 @@ object PhotoListImporter {
                 // ending in "-T" would otherwise self-match.
                 val masked = StringBuilder(line)
                 for (i in match.range) masked.setCharAt(i, ' ')
-                val spool = CodeMatcher.firstLoneLetter(masked.toString()).orEmpty()
-                val key = "$drawing|$spool"
-                if (seen.add(key)) {
+                var spool = CodeMatcher.firstLoneLetter(masked.toString()).orEmpty()
+
+                // Fallback: if no spool on the same line, look for the
+                // nearest unused bare-letter line within ±2 of this row.
+                // Handles ML Kit emitting cells on separate lines despite
+                // spatial reconstruction — belt-and-braces.
+                if (spool.isEmpty() && bareLetters.isNotEmpty()) {
+                    val nearestIdx = bareLetters.indexOfFirst { (li, _) ->
+                        kotlin.math.abs(li - rawIdx) <= 2
+                    }
+                    if (nearestIdx >= 0) {
+                        spool = bareLetters[nearestIdx].second
+                        // Mark consumed so the next drawing doesn't grab
+                        // the same letter.
+                        bareLetters.removeAt(nearestIdx)
+                    }
+                }
+
+                // OCR-confused dedup: collapse "321-01L-..." / "321-0IL-..."
+                // / "321-OIL-..." onto one canonical key by normalising
+                // O↔0, I↔1↔L, S↔5, B↔8 — same logic the matcher uses.
+                val canonicalKey = CodeMatcher.normalise("$drawing|$spool")
+                if (seen.add(canonicalKey)) {
                     out.add(XlsxImporter.Imported(drawing = drawing, spool = spool))
                     DebugLog.log("IMPORT",
                         "row → drawing=$drawing spool='${spool.ifEmpty { "<empty>" }}'  " +
@@ -111,7 +218,9 @@ object PhotoListImporter {
                 }
             }
         }
-        DebugLog.log("IMPORT", "parsed ${out.size} unique (drawing,spool) pairs")
+        DebugLog.log("IMPORT", "parsed ${out.size} unique (drawing,spool) pairs " +
+            "(${bareLetters.size} unused bare letters: " +
+            bareLetters.joinToString { it.second } + ")")
         return out
     }
 }

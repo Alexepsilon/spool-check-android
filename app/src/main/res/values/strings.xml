@@ -89,7 +89,7 @@
     <string name="scan_match_found">Match found</string>
     <string name="scan_wrong_match">Wrong match</string>
     <string name="scan_confirm_scan">Confirm scan</string>
-    <string name="scan_ocr_uncertain">OCR was uncertain. Did you mean:</string>
+    <string name="scan_ocr_uncertain">Likely match — close to a list entry. Use it?</string>
     <string name="scan_read_as_fmt">Read as: %1$s</string>
     <string name="scan_which_spool">Which spool?</string>
     <string name="scan_cant_read_spool">OCR couldn\'t read the spool letter clearly.</string>
@@ -107,7 +107,7 @@
     <string name="settings_title">Settings</string>
     <string name="settings_language">Language</string>
     <string name="settings_about">About</string>
-    <string name="settings_about_version">Spool Check Android · v1.0</string>
+    <string name="settings_about_version">Spool Check Android · v1.1</string>
     <string name="settings_about_blurb">Native build with ML Kit text recognition. All data lives locally on this device.</string>
     <string name="settings_lang_english">English</string>
     <string name="settings_lang_dutch">Nederlands</string>

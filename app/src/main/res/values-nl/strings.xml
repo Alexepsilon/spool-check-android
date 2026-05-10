@@ -107,7 +107,7 @@
     <string name="settings_title">Instellingen</string>
     <string name="settings_language">Taal</string>
     <string name="settings_about">Over</string>
-    <string name="settings_about_version">Spool Check Android · v1.0</string>
+    <string name="settings_about_version">Spool Check Android · v1.1</string>
     <string name="settings_about_blurb">Native build met ML Kit tekstherkenning. Alle data blijft lokaal op dit apparaat.</string>
     <string name="settings_lang_english">English</string>
     <string name="settings_lang_dutch">Nederlands</string>
