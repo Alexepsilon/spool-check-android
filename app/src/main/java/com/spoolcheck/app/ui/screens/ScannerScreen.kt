@@ -878,8 +878,9 @@ private fun PendingDialog(
                         TagContext(flow.preview)
                         flow.item?.let { mi ->
                             Spacer(Modifier.height(8.dp))
-                            if (!mi.diameter.isNullOrEmpty()) Text(
-                                stringResource(R.string.scan_diameter_fmt, mi.diameter),
+                            val dia = com.spoolcheck.app.core.effectiveDiameter(mi.diameter, mi.drawing)
+                            if (!dia.isNullOrEmpty()) Text(
+                                stringResource(R.string.scan_diameter_fmt, dia),
                                 fontSize = 13.sp,
                             )
                             // List's ch.clean column carries the same number

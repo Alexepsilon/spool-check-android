@@ -296,27 +296,16 @@ fun StatusBoardScreen(nav: NavController, deliveryId: String) {
                     )
                 }
                 Spacer(Modifier.height(12.dp))
+                // Two action buttons + delete: Verified / Reset.
+                // Missing and Damaged removed per user request — Reset is
+                // enough to walk back a wrong tick; Damaged was rarely used
+                // on site.
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     StatusBtn(stringResource(R.string.board_mark_verified), StatusVerified) {
                         scope.launchSafe(ctx, "Board.Verified") {
                             db.items().update(
                                 item.copy(status = "verified", verifiedAt = System.currentTimeMillis())
                             )
-                            actionItem = null
-                        }
-                    }
-                    StatusBtn(stringResource(R.string.board_mark_missing), StatusMissing) {
-                        scope.launchSafe(ctx, "Board.Missing") {
-                            db.items().update(item.copy(status = "missing", verifiedAt = null))
-                            actionItem = null
-                        }
-                    }
-                }
-                Spacer(Modifier.height(8.dp))
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    StatusBtn(stringResource(R.string.board_mark_damaged), StatusDamaged) {
-                        scope.launchSafe(ctx, "Board.Damaged") {
-                            db.items().update(item.copy(status = "damaged", verifiedAt = null))
                             actionItem = null
                         }
                     }
@@ -354,15 +343,15 @@ private fun ColumnHeader() {
             .background(MaterialTheme.colorScheme.surfaceVariant)
             .padding(vertical = 8.dp),
     ) {
+        // Trimmed column set — Paint, RAL, Iso no., Remark removed per
+        // user request. Data still lives in the DB and goes to the
+        // Excel export, but the on-screen board stays focused on the
+        // QC-relevant columns.
         HeaderCell(stringResource(R.string.col_drawing), 300.dp)
         HeaderCell(stringResource(R.string.col_spool), 60.dp)
         HeaderCell(stringResource(R.string.col_diameter), 80.dp)
-        HeaderCell(stringResource(R.string.col_paint), 110.dp)
-        HeaderCell(stringResource(R.string.col_ral), 80.dp)
         HeaderCell(stringResource(R.string.col_chclean), 90.dp)
         HeaderCell(stringResource(R.string.col_project), 90.dp)
-        HeaderCell(stringResource(R.string.col_iso), 200.dp)
-        HeaderCell(stringResource(R.string.col_remark), 200.dp)
         HeaderCell(stringResource(R.string.col_verified_at), 130.dp)
     }
 }
@@ -413,13 +402,14 @@ private fun ItemRow(item: MasterItem, onClick: () -> Unit) {
             )
         }
         DataCell(item.spool, 60.dp, mono = true)
-        DataCell(item.diameter ?: "—", 80.dp)
-        DataCell(if (item.paintSpec.isNullOrEmpty() || item.paintSpec == "N.A.") "—" else item.paintSpec, 110.dp)
-        DataCell(if (item.ral.isNullOrEmpty() || item.ral == "N.A.") "—" else item.ral, 80.dp)
+        // Effective diameter: stored value if the import captured it,
+        // otherwise derived from the drawing string ("SS-N" / "CS-N").
+        DataCell(
+            com.spoolcheck.app.core.effectiveDiameter(item.diameter, item.drawing) ?: "—",
+            80.dp,
+        )
         DataCell(item.chClean ?: "—", 90.dp)
         DataCell(item.project ?: "—", 90.dp)
-        DataCell(if (item.isoNumber == null || item.isoNumber == item.drawing) "—" else item.isoNumber, 200.dp, mono = true)
-        DataCell(item.remark ?: "—", 200.dp)
         DataCell(
             if (item.verifiedAt == null) "—"
             else SimpleDateFormat("MMM d, HH:mm", Locale.getDefault()).format(Date(item.verifiedAt)),

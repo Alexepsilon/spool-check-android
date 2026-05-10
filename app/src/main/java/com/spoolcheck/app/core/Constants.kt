@@ -56,3 +56,34 @@ fun composeKey(drawing: String, spool: String?): String {
     val s = (spool ?: "").trim().uppercase()
     return if (s.isEmpty()) drawing else "$drawing|$s"
 }
+
+/**
+ * Pull the DN diameter out of a Bakker Nedam drawing string. The DN
+ * value is the numeric segment immediately after the material code
+ * ("SS" for stainless, "CS" for carbon steel):
+ *   "321-OIL-0108-SS-15-T"        → "DN15"
+ *   "352-CWS-1530-CS-150-N-1"     → "DN150"
+ *   "322-FLA-1001-SS-100-P-2"     → "DN100"
+ *
+ * Returns null when no SS/CS segment is found (drawing doesn't follow
+ * the format, or material code uses a less common abbreviation).
+ */
+private val DIAMETER_FROM_DRAWING = Regex("""-(?:SS|CS)-(\d+)\b""")
+
+fun deriveDiameter(drawing: String): String? {
+    // Use lastOrNull so a drawing with multiple material segments
+    // (unusual but possible) takes the rightmost one — that's where
+    // the actual pipe diameter sits in Bakker Nedam's tag format.
+    val n = DIAMETER_FROM_DRAWING.findAll(drawing.uppercase())
+        .lastOrNull()?.groupValues?.get(1) ?: return null
+    return "DN$n"
+}
+
+/**
+ * Returns the effective diameter for display: stored value first,
+ * derived from drawing as fallback. Used by the Status Board and
+ * the match-found dialog so older imports that didn't capture a
+ * Diameter column still surface a value on screen.
+ */
+fun effectiveDiameter(stored: String?, drawing: String): String? =
+    stored?.takeIf { it.isNotEmpty() } ?: deriveDiameter(drawing)

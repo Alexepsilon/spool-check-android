@@ -107,8 +107,9 @@
     <string name="settings_title">Settings</string>
     <string name="settings_language">Language</string>
     <string name="settings_about">About</string>
-    <string name="settings_about_version">Spool Check Android · v1.1</string>
+    <string name="settings_about_version">Spool Check Android · v1.2</string>
     <string name="settings_about_blurb">Native build with ML Kit text recognition. All data lives locally on this device.</string>
+    <string name="settings_about_credit">Created by Aleks H specifically for Xycle project. Intellectual rights reserved.</string>
     <string name="settings_lang_english">English</string>
     <string name="settings_lang_dutch">Nederlands</string>
     <string name="settings_haptic_title">Vibrate on match</string>
